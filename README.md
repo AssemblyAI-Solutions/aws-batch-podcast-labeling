@@ -5,7 +5,7 @@ A scalable AWS Batch pipeline that automatically labels podcast speakers using A
 ## Overview
 
 This project processes a podcast catalogue stored in S3 to:
-1. Transcribe audio using AssemblyAI's API
+1. Transcribe audio using AssemblyAI's API. The audio files are pulled from the provided S3 bucket. If you'd prefer to use a CSV file with URLs instead, use this [script](https://github.com/AssemblyAI-Solutions/aws-batch-podcast-labeling/tree/read-from-csv) instead.
 2. Identify and label speakers using the LeMUR API based on this [Cookbook](https://github.com/AssemblyAI/cookbook/blob/master/lemur/speaker-identification.ipynb)
 3. Store the speaker-labeled transcript back in S3
 
