@@ -83,7 +83,16 @@ This project processes a podcast catalogue stored in S3 to:
 
 ## Usage
 
-1. Submit a batch job:
+1. Prepare your input CSV file with the following columns:
+   - `podcast_id`: Unique identifier for the podcast
+   - `episode_id`: Unique identifier for the episode
+   - `audio_url`: Direct URL to the audio file
+
+   Upload this file to your S3 bucket as:
+   - Without prefix: `s3://your-bucket/episodes.csv`
+   - With prefix: `s3://your-bucket/your-prefix/episodes.csv`
+
+2. Submit a batch job:
    ```bash
    aws batch submit-job \
        --job-name podcast-labeling-job \
@@ -91,7 +100,7 @@ This project processes a podcast catalogue stored in S3 to:
        --job-definition podcast-labeling-job
    ```
 
-2. Monitor progress:
+3. Monitor progress:
    ```bash
    # Get job status
    aws batch describe-jobs --jobs <job-id>
@@ -100,6 +109,15 @@ This project processes a podcast catalogue stored in S3 to:
    aws logs get-log-events \
        --log-group-name /aws/batch/podcast-labeling \
        --log-stream-name podcast-labeling/<job-id>
+   ```
+
+4. Output Structure:
+   The transcripts will be saved in S3 with the following partition structure:
+   ```
+   s3://your-bucket/
+       podcast_id=123/
+           episode_id=1234/
+               1234_transcript.json
    ```
 
 ## Project Structure

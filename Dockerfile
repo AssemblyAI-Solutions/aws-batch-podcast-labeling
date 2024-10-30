@@ -4,7 +4,8 @@ FROM --platform=linux/amd64 python:3.9-slim
 RUN pip install --no-cache-dir \
     boto3 \
     assemblyai \
-    requests
+    requests \
+    pandas
 
 # Set working directory
 WORKDIR /app

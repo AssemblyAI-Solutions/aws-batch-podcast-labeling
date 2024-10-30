@@ -4,6 +4,8 @@ import assemblyai as aai
 import concurrent.futures
 from typing import List
 import re
+import pandas as pd
+import json
 
 # Configure AWS and AssemblyAI clients
 s3_client = boto3.client('s3')
@@ -58,79 +60,89 @@ def label_speakers(transcript: aai.Transcript) -> str:
 
     return speaker_labelled_transcript
 
-
-def process_audio_file(bucket_name: str, object_key: str) -> None:
-    try:
-        # Generate a presigned URL for the S3 object
-        presigned_url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': bucket_name, 'Key': object_key},
-            ExpiresIn=3600
-        )
-        
-        transcript = transcribe_audio_file(presigned_url)
-        speaker_labelled_transcript = label_speakers(transcript)
-        # Save transcription to S3
-        output_key = f"transcripts/{object_key.split('/')[-1]}.txt"
-        s3_client.put_object(
-            Bucket=bucket_name,
-            Key=output_key,
-            Body=speaker_labelled_transcript
-        )
-        
-        print(f"Successfully transcribed {object_key} to {output_key}")
-        return True
-        
-    except Exception as e:
-        print(f"Error processing {object_key}: {str(e)}")
-        return False
-
-def get_audio_files(bucket_name: str, prefix: str) -> List[str]:
-    """Get list of audio files from S3 bucket"""
+def get_audio_files(bucket_name: str, prefix: str) -> List[dict]:
+    """Get list of audio files from CSV in S3 bucket"""
     try:
         # Remove s3:// prefix if present
         bucket_name = bucket_name.replace('s3://', '')
         
-        response = s3_client.list_objects_v2(
+        # Get CSV file from S3
+        response = s3_client.get_object(
             Bucket=bucket_name,
-            Prefix=prefix
+            Key=f"{prefix}/episodes.csv" if prefix else "episodes.csv"
         )
         
-        audio_files = [
-            obj['Key'] for obj in response.get('Contents', [])
-            if obj['Key'].endswith(('.mp3', '.wav', '.m4a', '.mp4', '.mov', '.avi', '.mkv'))
-        ]
-        return audio_files
+        # Read CSV into pandas DataFrame
+        df = pd.read_csv(response['Body'])
+        
+        # Validate required columns
+        required_columns = ['podcast_id', 'episode_id', 'audio_url']
+        if not all(col in df.columns for col in required_columns):
+            raise ValueError(f"CSV must contain columns: {required_columns}")
+        
+        # Convert DataFrame to list of dictionaries
+        return df.to_dict('records')
     except Exception as e:
-        print(f"Error listing objects: {str(e)}")
+        print(f"Error reading CSV: {str(e)}")
         return []
+
+def process_audio_file(bucket_name: str, episode_data: dict) -> None:
+    try:
+        audio_url = episode_data['audio_url']
+        podcast_id = str(episode_data['podcast_id'])
+        episode_id = str(episode_data['episode_id'])
+        
+        transcript = transcribe_audio_file(audio_url)
+        speaker_labelled_transcript = label_speakers(transcript)
+        
+        # Create JSON output
+        output_data = {
+            'podcast_id': podcast_id,
+            'episode_id': episode_id,
+            'transcript': speaker_labelled_transcript
+        }
+        
+        # Save transcription to S3 with partitioned path
+        output_key = f"podcast_id={podcast_id}/episode_id={episode_id}/{episode_id}_transcript.json"
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=output_key,
+            Body=json.dumps(output_data, indent=2)
+        )
+        
+        print(f"Successfully transcribed episode {episode_id} to {output_key}")
+        return True
+        
+    except Exception as e:
+        print(f"Error processing episode {episode_data.get('episode_id')}: {str(e)}")
+        return False
 
 def main():
     # Get environment variables
     bucket_name = os.environ['S3_BUCKET_LOCATION']
     prefix = os.environ.get('S3_BUCKET_PREFIX', '')
     
-    # Get list of audio files
-    audio_files = get_audio_files(bucket_name, prefix)
-    if not audio_files:
-        print("No audio files found to process")
+    # Get list of episodes from CSV
+    episodes = get_audio_files(bucket_name, prefix)
+    if not episodes:
+        print("No episodes found to process")
         return
 
-    print(f"Found {len(audio_files)} audio files to process")
+    print(f"Found {len(episodes)} episodes to process")
     print(f"Processing with max {MAX_CONCURRENT_JOBS} concurrent jobs")
     
     # Process files concurrently
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as executor:
         futures = [
-            executor.submit(process_audio_file, bucket_name, audio_file)
-            for audio_file in audio_files
+            executor.submit(process_audio_file, bucket_name, episode)
+            for episode in episodes
         ]
         
         # Wait for all futures to complete
         completed = 0
         for future in concurrent.futures.as_completed(futures):
             completed += 1
-            print(f"Progress: {completed}/{len(audio_files)} files processed")
+            print(f"Progress: {completed}/{len(episodes)} files processed")
 
 if __name__ == "__main__":
     main()
