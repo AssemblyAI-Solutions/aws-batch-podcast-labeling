@@ -5,7 +5,6 @@ import concurrent.futures
 from typing import List
 import re
 import pandas as pd
-import json
 
 # Configure AWS and AssemblyAI clients
 s3_client = boto3.client('s3')
@@ -95,19 +94,12 @@ def process_audio_file(bucket_name: str, episode_data: dict) -> None:
         transcript = transcribe_audio_file(audio_url)
         speaker_labelled_transcript = label_speakers(transcript)
         
-        # Create JSON output
-        output_data = {
-            'podcast_id': podcast_id,
-            'episode_id': episode_id,
-            'transcript': speaker_labelled_transcript
-        }
-        
-        # Save transcription to S3 with partitioned path
-        output_key = f"podcast_id={podcast_id}/episode_id={episode_id}/{episode_id}_transcript.json"
+        # Save transcription to S3 with partitioned path as txt file
+        output_key = f"podcast_id={podcast_id}/episode_id={episode_id}/{episode_id}_transcript.txt"
         s3_client.put_object(
             Bucket=bucket_name,
             Key=output_key,
-            Body=json.dumps(output_data, indent=2)
+            Body=speaker_labelled_transcript
         )
         
         print(f"Successfully transcribed episode {episode_id} to {output_key}")
