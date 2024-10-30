@@ -1,0 +1,62 @@
+{
+    "jobDefinitionName": "podcast-labeling-job",
+    "type": "container",
+    "containerProperties": {
+        "image": "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/podcast-labeling:latest",
+        "jobRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/BatchJobRole",
+        "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/BatchExecutionRole",
+        "vcpus": 2,
+        "memory": 4096,
+        "environment": [
+            {
+                "name": "S3_BUCKET_LOCATION",
+                "value": "your-bucket-location"
+            },
+            {
+                "name": "ASSEMBLYAI_API_KEY",
+                "value": "your-api-key"
+            },
+            {
+                "name": "S3_BUCKET_PREFIX",
+                "value": ""
+            },
+            {
+                "name": "MAX_CONCURRENT_JOBS",
+                "value": "200"
+            }
+        ],
+        "logConfiguration": {
+            "logDriver": "awslogs",
+            "options": {
+                "awslogs-group": "/aws/batch/podcast-labeling",
+                "awslogs-region": "${AWS_REGION}",
+                "awslogs-stream-prefix": "podcast-labeling",
+                "awslogs-create-group": "true"
+            }
+        },
+        "mountPoints": [],
+        "volumes": [],
+        "ulimits": [
+            {
+                "hardLimit": 4096,
+                "name": "nofile",
+                "softLimit": 4096
+            }
+        ]
+    },
+    "retryStrategy": {
+        "attempts": 2,
+        "evaluateOnExit": [
+            {
+                "onStatusReason": "*",
+                "action": "RETRY"
+            }
+        ]
+    },
+    "timeout": {
+        "attemptDurationSeconds": 3600
+    },
+    "platformCapabilities": [
+        "EC2"
+    ]
+}
